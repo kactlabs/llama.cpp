@@ -138,3 +138,12 @@ poetry.toml
 /.windsurf/
 # emscripten
 a.out.*
+
+# Rust (llama-rs conversion)
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+rust-project.json
+**/*.rmeta
+Cargo.lock
