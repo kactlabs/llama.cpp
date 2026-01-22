@@ -6,15 +6,17 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use memmap2::Mmap;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Read};
 use std::path::Path;
 
 pub struct GGUFReader {
     version: GGUFVersion,
     tensor_count: u64,
+    #[allow(dead_code)]
     metadata_kv_count: u64,
     metadata: Metadata,
     tensors: HashMap<String, TensorInfo>,
+    #[allow(dead_code)]
     alignment: u64,
     data_offset: u64,
     mmap: Option<Mmap>,
