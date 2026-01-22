@@ -1,0 +1,14 @@
+[package]
+name = "simple"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "gguf-info"
+path = "src/gguf_info.rs"
+
+[dependencies]
+gguf = { path = "../../crates/gguf" }
+anyhow.workspace = true
+clap.workspace = true

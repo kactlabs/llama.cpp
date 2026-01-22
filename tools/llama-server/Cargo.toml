@@ -1,0 +1,15 @@
+[package]
+name = "llama-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "HTTP API server for llama-rs"
+
+[dependencies]
+llama-core = { path = "../../crates/llama/llama-core" }
+anyhow.workspace = true
+tokio.workspace = true
+axum.workspace = true

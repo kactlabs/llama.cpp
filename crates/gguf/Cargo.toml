@@ -1,0 +1,21 @@
+[package]
+name = "gguf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "GGUF file format parser and writer"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+byteorder.workspace = true
+memmap2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+half.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true

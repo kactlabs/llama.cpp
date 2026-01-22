@@ -1,0 +1,16 @@
+[package]
+name = "ggml-cpu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "GGML CPU backend with SIMD optimizations"
+
+[dependencies]
+ggml-core = { path = "../ggml-core" }
+ggml-backend = { path = "../ggml-backend" }
+anyhow.workspace = true
+rayon.workspace = true
+num_cpus.workspace = true

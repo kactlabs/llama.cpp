@@ -1,0 +1,16 @@
+[package]
+name = "llama-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core llama.cpp functionality"
+
+[dependencies]
+ggml-core = { path = "../../ggml/ggml-core" }
+ggml-backend = { path = "../../ggml/ggml-backend" }
+gguf = { path = "../../gguf" }
+anyhow.workspace = true
+thiserror.workspace = true

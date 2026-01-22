@@ -1,0 +1,73 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ggml/ggml-core",
+    "crates/ggml/ggml-backend",
+    "crates/ggml/ggml-cpu",
+    "crates/ggml/ggml-quants",
+    "crates/gguf",
+    "crates/llama/llama-core",
+    "crates/llama/llama-model",
+    "crates/llama/llama-vocab",
+    "crates/llama/llama-sampling",
+    "crates/common",
+    "tools/llama-cli",
+    "tools/llama-server",
+    "tools/llama-bench",
+    "examples/simple",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+authors = ["llama-rs contributors"]
+license = "MIT"
+repository = "https://github.com/your-org/llama-rs"
+
+[workspace.dependencies]
+# Core dependencies
+anyhow = "1.0"
+thiserror = "1.0"
+byteorder = "1.5"
+memmap2 = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Numerics
+half = "2.3"
+num-traits = "0.2"
+
+# Parallelism
+rayon = "1.8"
+num_cpus = "1.16"
+
+# Async (for server)
+tokio = { version = "1.35", features = ["full"] }
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+indicatif = "0.17"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Testing
+criterion = "0.5"
+proptest = "1.4"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[profile.bench]
+inherits = "release"
+
+[profile.dev]
+opt-level = 1
