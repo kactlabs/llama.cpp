@@ -678,6 +678,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+name = "lrama-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ggml-core",
+ "ggml-cpu",
+ "gguf",
+]
+
+[[package]]
 name = "matchit"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

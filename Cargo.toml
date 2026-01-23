@@ -11,6 +11,7 @@ members = [
     "crates/llama/llama-vocab",
     "crates/llama/llama-sampling",
     "crates/common",
+    "crates/lrama-cli",
     "tools/llama-cli",
     "tools/llama-server",
     "tools/llama-bench",
