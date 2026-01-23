@@ -292,6 +292,60 @@ impl Context {
     pub fn available_size(&self) -> usize {
         self.stats.available()
     }
+    
+    /// Set tensor data from a slice
+    pub fn set_tensor_data_f32(&mut self, tensor: &Tensor, data: &[f32]) -> Result<()> {
+        if tensor.tensor_type != TensorType::F32 {
+            return Err(ContextError::InvalidDimensions);
+        }
+        
+        let n_elements = tensor.n_elements();
+        if data.len() != n_elements {
+            return Err(ContextError::InvalidDimensions);
+        }
+        
+        if let Some(ptr) = tensor.data() {
+            unsafe {
+                let dest = std::slice::from_raw_parts_mut(ptr.as_ptr() as *mut f32, n_elements);
+                dest.copy_from_slice(data);
+            }
+            Ok(())
+        } else {
+            Err(ContextError::AllocationFailed)
+        }
+    }
+    
+    /// Get tensor data as a slice
+    pub fn get_tensor_data_f32(&self, tensor: &Tensor) -> Result<&[f32]> {
+        if tensor.tensor_type != TensorType::F32 {
+            return Err(ContextError::InvalidDimensions);
+        }
+        
+        if let Some(ptr) = tensor.data() {
+            let n_elements = tensor.n_elements();
+            unsafe {
+                Ok(std::slice::from_raw_parts(ptr.as_ptr() as *const f32, n_elements))
+            }
+        } else {
+            Err(ContextError::AllocationFailed)
+        }
+    }
+    
+    /// Get mutable tensor data as a slice
+    pub fn get_tensor_data_f32_mut(&mut self, tensor: &Tensor) -> Result<&mut [f32]> {
+        if tensor.tensor_type != TensorType::F32 {
+            return Err(ContextError::InvalidDimensions);
+        }
+        
+        if let Some(ptr) = tensor.data() {
+            let n_elements = tensor.n_elements();
+            unsafe {
+                Ok(std::slice::from_raw_parts_mut(ptr.as_ptr() as *mut f32, n_elements))
+            }
+        } else {
+            Err(ContextError::AllocationFailed)
+        }
+    }
 }
 
 impl Drop for Context {
@@ -404,5 +458,40 @@ mod tests {
         assert!(t1.data().is_some());
         assert!(t2.data().is_some());
         assert!(ctx.total_size() > 100); // Should have grown
+    }
+    
+    #[test]
+    fn test_set_get_tensor_data() {
+        let mut ctx = Context::new(1024 * 1024).unwrap();
+        let tensor = ctx.new_tensor_1d(TensorType::F32, 5).unwrap();
+        
+        // Set data
+        let input = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        ctx.set_tensor_data_f32(&tensor, &input).unwrap();
+        
+        // Get data back
+        let output = ctx.get_tensor_data_f32(&tensor).unwrap();
+        assert_eq!(output, &[1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
+    
+    #[test]
+    fn test_tensor_data_mut() {
+        let mut ctx = Context::new(1024 * 1024).unwrap();
+        let tensor = ctx.new_tensor_1d(TensorType::F32, 3).unwrap();
+        
+        // Set initial data
+        ctx.set_tensor_data_f32(&tensor, &[1.0, 2.0, 3.0]).unwrap();
+        
+        // Modify data
+        {
+            let data = ctx.get_tensor_data_f32_mut(&tensor).unwrap();
+            data[0] = 10.0;
+            data[1] = 20.0;
+            data[2] = 30.0;
+        }
+        
+        // Verify modification
+        let data = ctx.get_tensor_data_f32(&tensor).unwrap();
+        assert_eq!(data, &[10.0, 20.0, 30.0]);
     }
 }

@@ -417,10 +417,10 @@ name = "ggml-cpu"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "ggml-backend",
  "ggml-core",
  "num_cpus",
  "rayon",
+ "thiserror",
 ]
 
 [[package]]
