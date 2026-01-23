@@ -14,3 +14,10 @@ anyhow.workspace = true
 thiserror.workspace = true
 rayon.workspace = true
 num_cpus.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "simd_benchmark"
+harness = false

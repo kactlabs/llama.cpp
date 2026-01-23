@@ -16,10 +16,8 @@ impl CpuCompute {
             ));
         }
         
-        for i in 0..a.len() {
-            c[i] = a[i] + b[i];
-        }
-        
+        // Use SIMD-optimized version
+        crate::simd::SimdOps::add_f32(a, b, c);
         Ok(())
     }
     
@@ -31,10 +29,8 @@ impl CpuCompute {
             ));
         }
         
-        for i in 0..a.len() {
-            c[i] = a[i] * b[i];
-        }
-        
+        // Use SIMD-optimized version
+        crate::simd::SimdOps::mul_f32(a, b, c);
         Ok(())
     }
     
@@ -109,18 +105,27 @@ impl CpuCompute {
         c.fill(0.0);
         
         // GGML convention: C[b0, a1] = A[a0, a1] @ B[b0, b1]
-        // This is like: for each output position (i, j) in C[b0, a1]:
-        //   C[i, j] = sum_k A[k, j] * B[i, k]
+        // Optimized version using SIMD dot products
         
-        for i in 0..b0 {
-            for j in 0..a1 {
+        // For each output position (i, j) in C[b0, a1]:
+        //   C[i, j] = sum_k A[k, j] * B[i, k]
+        // This is a dot product of column j of A with row i of B
+        
+        for j in 0..a1 {
+            // Column j of A starts at index j * a0
+            let a_col = &a[j * a0..(j + 1) * a0];
+            
+            for i in 0..b0 {
+                // Row i of B: elements at positions i, i+b0, i+2*b0, ...
+                // We need to extract this row for dot product
+                // For better performance with SIMD, we'll use the inner loop
                 let mut sum = 0.0;
                 for k in 0..a0 {
-                    // A is stored as [a0, a1], so A[k, j] is at index k + j * a0
-                    // B is stored as [b0, b1], so B[i, k] is at index i + k * b0
-                    sum += a[k + j * a0] * b[i + k * b0];
+                    // A[k, j] is at index k + j * a0
+                    // B[i, k] is at index i + k * b0
+                    sum += a_col[k] * b[i + k * b0];
                 }
-                // C is stored as [b0, a1], so C[i, j] is at index i + j * b0
+                // C[i, j] is at index i + j * b0
                 c[i + j * b0] = sum;
             }
         }

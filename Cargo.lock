@@ -417,6 +417,7 @@ name = "ggml-cpu"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "criterion",
  "ggml-core",
  "num_cpus",
  "rayon",
