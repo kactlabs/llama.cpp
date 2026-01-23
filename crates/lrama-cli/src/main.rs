@@ -2,10 +2,16 @@
 //!
 //! A pure Rust implementation of LLaMA model inference using GGUF format.
 
+mod tokenizer;
+mod model;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use gguf::GGUFReader;
 use std::path::PathBuf;
+use tokenizer::Tokenizer;
+use model::LlamaModel;
+use ggml_core::Context as GGMLContext;
 
 #[derive(Parser, Debug)]
 #[command(name = "lrama-cli")]
@@ -50,6 +56,19 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Load tokenizer
+    println!("\n📚 Loading tokenizer...");
+    let tokenizer = Tokenizer::from_gguf(&reader)?;
+    println!("  Vocabulary size: {}", tokenizer.vocab_size());
+    println!("  BOS token: {}", tokenizer.bos_token);
+    println!("  EOS token: {}", tokenizer.eos_token);
+
+    // Load model
+    println!("\n🧠 Loading model weights...");
+    let mem_size = 8 * 1024 * 1024 * 1024; // 8 GB
+    let mut ctx = GGMLContext::new(mem_size)?;
+    let model = LlamaModel::from_gguf(&reader, &mut ctx)?;
+
     // Get prompt
     let prompt = args.prompt.unwrap_or_else(|| {
         "Once upon a time".to_string()
@@ -59,14 +78,17 @@ fn main() -> Result<()> {
     println!("🎲 Temperature: {}", args.temperature);
     println!("🔢 Generating {} tokens\n", args.n_predict);
 
-    // TODO: Implement actual inference
-    println!("⚠️  Inference not yet implemented!");
-    println!("   Next steps:");
-    println!("   1. Tokenize prompt");
-    println!("   2. Load model weights into tensors");
-    println!("   3. Run forward pass");
-    println!("   4. Sample next token");
-    println!("   5. Repeat for n_predict tokens");
+    // Tokenize
+    println!("🔤 Tokenizing...");
+    let tokens = tokenizer.encode(&prompt, true);
+    println!("  {} tokens: {:?}", tokens.len(), &tokens[..tokens.len().min(10)]);
+
+    // TODO: Implement inference loop
+    println!("\n⚠️  Inference loop not yet implemented!");
+    println!("   Model loaded successfully, but generation requires:");
+    println!("   - Attention mechanism with KV cache");
+    println!("   - Forward pass implementation");
+    println!("   - Sampling strategy");
 
     Ok(())
 }
@@ -82,6 +104,18 @@ fn print_model_info(reader: &GGUFReader) -> Result<()> {
     }
     if let Some(arch) = reader.get_metadata("general.architecture") {
         println!("   Architecture: {:?}", arch);
+    }
+    
+    // Print all metadata keys for debugging
+    println!("\n🔍 Metadata keys:");
+    let metadata = reader.metadata();
+    let mut keys: Vec<_> = metadata.keys().collect();
+    keys.sort();
+    for key in keys.iter().take(20) {
+        println!("   {}", key);
+    }
+    if keys.len() > 20 {
+        println!("   ... and {} more", keys.len() - 20);
     }
 
     // Print some tensor names

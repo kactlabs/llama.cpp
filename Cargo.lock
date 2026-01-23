@@ -685,7 +685,9 @@ dependencies = [
  "clap",
  "ggml-core",
  "ggml-cpu",
+ "ggml-quants",
  "gguf",
+ "half",
 ]
 
 [[package]]

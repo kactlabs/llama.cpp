@@ -10,6 +10,8 @@ path = "src/main.rs"
 [dependencies]
 ggml-core = { path = "../ggml/ggml-core" }
 ggml-cpu = { path = "../ggml/ggml-cpu" }
+ggml-quants = { path = "../ggml/ggml-quants" }
 gguf = { path = "../gguf" }
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
+half = "2.3"
