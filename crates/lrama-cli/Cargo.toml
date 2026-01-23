@@ -15,3 +15,4 @@ gguf = { path = "../gguf" }
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 half = "2.3"
+rand = "0.8"

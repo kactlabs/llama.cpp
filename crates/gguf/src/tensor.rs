@@ -135,7 +135,7 @@ impl GGMLType {
             Self::Q5_1 => 24,
             Self::Q8_0 => 34,
             Self::Q8_1 => 36,
-            Self::Q2_K => 82,
+            Self::Q2_K => 84,
             Self::Q3_K => 110,
             Self::Q4_K => 144,
             Self::Q5_K => 176,

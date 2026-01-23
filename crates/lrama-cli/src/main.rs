@@ -4,6 +4,10 @@
 
 mod tokenizer;
 mod model;
+mod kv_cache;
+mod attention;
+mod inference;
+mod generate;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -12,6 +16,7 @@ use std::path::PathBuf;
 use tokenizer::Tokenizer;
 use model::LlamaModel;
 use ggml_core::Context as GGMLContext;
+use generate::{generate, GenerationConfig};
 
 #[derive(Parser, Debug)]
 #[command(name = "lrama-cli")]
@@ -83,12 +88,20 @@ fn main() -> Result<()> {
     let tokens = tokenizer.encode(&prompt, true);
     println!("  {} tokens: {:?}", tokens.len(), &tokens[..tokens.len().min(10)]);
 
-    // TODO: Implement inference loop
-    println!("\n⚠️  Inference loop not yet implemented!");
-    println!("   Model loaded successfully, but generation requires:");
-    println!("   - Attention mechanism with KV cache");
-    println!("   - Forward pass implementation");
-    println!("   - Sampling strategy");
+    // Generate text!
+    println!("\n🎯 Generating text...");
+    let config = GenerationConfig {
+        temperature: args.temperature,
+        n_predict: args.n_predict,
+        ..Default::default()
+    };
+    
+    let generated = generate(&model, &tokenizer, &prompt, &config)?;
+    
+    println!("\n📄 Generated text:");
+    println!("─────────────────────────────────────");
+    println!("{}", generated);
+    println!("─────────────────────────────────────");
 
     Ok(())
 }

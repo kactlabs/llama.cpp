@@ -4,21 +4,20 @@
 
 use anyhow::{Context as AnyhowContext, Result};
 use ggml_core::{Context, Tensor, TensorType};
-use ggml_cpu::compute::CpuCompute;
-use ggml_quants::{dequantize_f32, dequantize_q2_k, dequantize_q3_k, dequantize_q4_k};
+use ggml_quants::{dequantize_f32, dequantize_q2_k, dequantize_q3_k, dequantize_q4_k, dequantize_q6_k};
 use gguf::{GGMLType, GGUFReader};
-use std::collections::HashMap;
 use std::io::Write;
 
 pub struct LlamaModel {
     pub n_vocab: usize,
     pub n_embd: usize,
     pub n_head: usize,
+    pub n_head_kv: usize,
     pub n_layer: usize,
     pub n_ctx: usize,
     
     // Weights (all dequantized to F32)
-    pub token_embd: Tensor,
+    pub token_embd: Vec<f32>,
     pub layers: Vec<LlamaLayer>,
     pub output_norm_weight: Vec<f32>,
 }
@@ -39,7 +38,7 @@ pub struct LlamaLayer {
 }
 
 impl LlamaModel {
-    pub fn from_gguf(reader: &GGUFReader, ctx: &mut Context) -> Result<Self> {
+    pub fn from_gguf(reader: &GGUFReader, _ctx: &mut Context) -> Result<Self> {
         println!("Loading model architecture...");
         
         // Read hyperparameters from actual GGUF keys
@@ -59,6 +58,11 @@ impl LlamaModel {
             .and_then(|v| v.as_u32().ok())
             .unwrap_or(2048) as usize;
         
+        // Check for grouped-query attention
+        let n_head_kv = reader.get_metadata("llama.attention.head_count_kv")
+            .and_then(|v| v.as_u32().ok())
+            .unwrap_or(n_head as u32) as usize;
+        
         // Get vocab size from tokenizer tokens array
         let tokens = reader.get_metadata("tokenizer.ggml.tokens")
             .context("Missing tokenizer.ggml.tokens")?;
@@ -67,12 +71,25 @@ impl LlamaModel {
             _ => return Err(anyhow::anyhow!("tokenizer.ggml.tokens must be an array")),
         };
         
-        println!("  vocab={}, embd={}, heads={}, layers={}, ctx={}", 
-                 n_vocab, n_embd, n_head, n_layer, n_ctx);
+        println!("  vocab={}, embd={}, heads={}, kv_heads={}, layers={}, ctx={}", 
+                 n_vocab, n_embd, n_head, n_head_kv, n_layer, n_ctx);
         
         // Load token embeddings
         println!("Loading token embeddings...");
-        let token_embd = load_tensor(reader, ctx, "token_embd.weight")?;
+        let token_embd = load_tensor_data(reader, "token_embd.weight")?;
+        
+        // Verify size
+        let expected_size = n_embd * n_vocab;
+        if token_embd.len() != expected_size {
+            eprintln!("Warning: token_embd size mismatch. Expected {}, got {}", 
+                     expected_size, token_embd.len());
+        }
+        
+        // Check for NaN/Inf in embeddings
+        let nan_count = token_embd.iter().filter(|&&x| x.is_nan() || x.is_infinite()).count();
+        if nan_count > 0 {
+            eprintln!("Warning: {} NaN/Inf values in token embeddings", nan_count);
+        }
         
         // Load output norm
         println!("Loading output norm...");
@@ -94,6 +111,7 @@ impl LlamaModel {
             n_vocab,
             n_embd,
             n_head,
+            n_head_kv,
             n_layer,
             n_ctx,
             token_embd,
@@ -109,8 +127,29 @@ impl LlamaLayer {
         
         // Try to load each tensor, with better error messages
         let load_weight = |name: &str| -> Result<Vec<f32>> {
-            load_tensor_data(reader, name)
-                .with_context(|| format!("Failed to load {}", name))
+            let weights = load_tensor_data(reader, name)
+                .with_context(|| format!("Failed to load {}", name))?;
+            
+            // Check for NaN/Inf in first layer only
+            if layer_idx == 0 {
+                let nan_count = weights.iter().filter(|x| !x.is_finite()).count();
+                if nan_count > 0 {
+                    eprintln!("WARNING: {} has {} NaN/Inf values out of {}", 
+                             name, nan_count, weights.len());
+                }
+                
+                // Print dimensions and first few values for debugging
+                if let Some(info) = reader.get_tensor_info(name) {
+                    eprintln!("  {} dimensions: {:?}, {} elements", 
+                             name, info.dimensions, weights.len());
+                    
+                    if name.contains("attn_q.weight") {
+                        eprintln!("  First 20 values of {}: {:?}", name, &weights[..20.min(weights.len())]);
+                    }
+                }
+            }
+            
+            Ok(weights)
         };
         
         Ok(Self {
@@ -145,6 +184,7 @@ fn load_tensor(reader: &GGUFReader, ctx: &mut Context, name: &str) -> Result<Ten
         GGMLType::Q2_K => dequantize_q2_k(raw_data, &mut f32_data)?,
         GGMLType::Q3_K => dequantize_q3_k(raw_data, &mut f32_data)?,
         GGMLType::Q4_K => dequantize_q4_k(raw_data, &mut f32_data)?,
+        GGMLType::Q6_K => dequantize_q6_k(raw_data, &mut f32_data)?,
         _ => return Err(anyhow::anyhow!("Unsupported tensor type: {:?}", info.tensor_type)),
     }
     
@@ -167,6 +207,7 @@ fn load_tensor_data(reader: &GGUFReader, name: &str) -> Result<Vec<f32>> {
         GGMLType::Q2_K => dequantize_q2_k(raw_data, &mut f32_data)?,
         GGMLType::Q3_K => dequantize_q3_k(raw_data, &mut f32_data)?,
         GGMLType::Q4_K => dequantize_q4_k(raw_data, &mut f32_data)?,
+        GGMLType::Q6_K => dequantize_q6_k(raw_data, &mut f32_data)?,
         _ => return Err(anyhow::anyhow!("Unsupported tensor type: {:?}", info.tensor_type)),
     }
     
