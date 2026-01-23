@@ -67,6 +67,8 @@ impl CpuCompute {
     /// Matrix multiplication: C = A @ B (GGML convention)
     /// A: [a0, a1], B: [b0, b1], C: [b0, a1]
     /// Requires: a0 == b1
+    /// 
+    /// This version uses parallel processing for better performance on multi-core CPUs
     pub fn matmul_f32(
         a: &[f32],
         a_shape: [usize; 2],
@@ -104,31 +106,82 @@ impl CpuCompute {
         // Initialize output to zero
         c.fill(0.0);
         
-        // GGML convention: C[b0, a1] = A[a0, a1] @ B[b0, b1]
-        // Optimized version using SIMD dot products
+        // Use parallel processing for larger matrices
+        // Threshold: parallelize if output has at least 1024 elements
+        let use_parallel = b0 * a1 >= 1024;
         
+        if use_parallel {
+            Self::matmul_f32_parallel(a, a_shape, b, b_shape, c)
+        } else {
+            Self::matmul_f32_sequential(a, a_shape, b, b_shape, c)
+        }
+    }
+    
+    /// Sequential matrix multiplication (for small matrices)
+    fn matmul_f32_sequential(
+        a: &[f32],
+        a_shape: [usize; 2],
+        b: &[f32],
+        b_shape: [usize; 2],
+        c: &mut [f32],
+    ) -> Result<()> {
+        let [a0, a1] = a_shape;
+        let [b0, _b1] = b_shape;
+        
+        // GGML convention: C[b0, a1] = A[a0, a1] @ B[b0, b1]
         // For each output position (i, j) in C[b0, a1]:
         //   C[i, j] = sum_k A[k, j] * B[i, k]
-        // This is a dot product of column j of A with row i of B
         
         for j in 0..a1 {
             // Column j of A starts at index j * a0
             let a_col = &a[j * a0..(j + 1) * a0];
             
             for i in 0..b0 {
-                // Row i of B: elements at positions i, i+b0, i+2*b0, ...
-                // We need to extract this row for dot product
-                // For better performance with SIMD, we'll use the inner loop
                 let mut sum = 0.0;
                 for k in 0..a0 {
-                    // A[k, j] is at index k + j * a0
-                    // B[i, k] is at index i + k * b0
                     sum += a_col[k] * b[i + k * b0];
                 }
-                // C[i, j] is at index i + j * b0
                 c[i + j * b0] = sum;
             }
         }
+        
+        Ok(())
+    }
+    
+    /// Parallel matrix multiplication (for large matrices)
+    fn matmul_f32_parallel(
+        a: &[f32],
+        a_shape: [usize; 2],
+        b: &[f32],
+        b_shape: [usize; 2],
+        c: &mut [f32],
+    ) -> Result<()> {
+        use rayon::prelude::*;
+        
+        let [a0, a1] = a_shape;
+        let [b0, _b1] = b_shape;
+        
+        // Parallelize over output columns
+        // Each thread computes one or more columns of the output
+        c.par_chunks_mut(b0)
+            .enumerate()
+            .for_each(|(j, c_col)| {
+                if j >= a1 {
+                    return;
+                }
+                
+                // Column j of A
+                let a_col = &a[j * a0..(j + 1) * a0];
+                
+                // Compute column j of C
+                for i in 0..b0 {
+                    let mut sum = 0.0;
+                    for k in 0..a0 {
+                        sum += a_col[k] * b[i + k * b0];
+                    }
+                    c_col[i] = sum;
+                }
+            });
         
         Ok(())
     }
@@ -217,6 +270,7 @@ impl CpuCompute {
     }
     
     /// RMS Normalization: c = a / sqrt(mean(a^2) + eps)
+    /// Uses parallel processing for large tensors
     pub fn rms_norm_f32(a: &[f32], c: &mut [f32], eps: f32) -> Result<()> {
         if a.len() != c.len() {
             return Err(CpuBackendError::ShapeMismatch(
@@ -228,19 +282,33 @@ impl CpuCompute {
             return Ok(());
         }
         
-        // Compute mean of squares
-        let mut sum_sq = 0.0;
-        for &val in a {
-            sum_sq += val * val;
-        }
-        let mean_sq = sum_sq / a.len() as f32;
+        // Compute mean of squares (can be parallelized for large arrays)
+        let sum_sq: f32 = if a.len() >= 10000 {
+            use rayon::prelude::*;
+            a.par_iter().map(|&val| val * val).sum()
+        } else {
+            let mut sum_sq = 0.0;
+            for &val in a {
+                sum_sq += val * val;
+            }
+            sum_sq
+        };
         
-        // Compute RMS
+        let mean_sq = sum_sq / a.len() as f32;
         let rms = (mean_sq + eps).sqrt();
         
-        // Normalize
-        for i in 0..a.len() {
-            c[i] = a[i] / rms;
+        // Normalize (can be parallelized)
+        if a.len() >= 10000 {
+            use rayon::prelude::*;
+            a.par_iter()
+                .zip(c.par_iter_mut())
+                .for_each(|(&val, out)| {
+                    *out = val / rms;
+                });
+        } else {
+            for i in 0..a.len() {
+                c[i] = a[i] / rms;
+            }
         }
         
         Ok(())
@@ -485,6 +553,7 @@ impl CpuCompute {
     }
     
     /// Layer normalization: c = (a - mean(a)) / sqrt(var(a) + eps)
+    /// Uses parallel processing for large tensors
     pub fn layer_norm_f32(a: &[f32], c: &mut [f32], eps: f32) -> Result<()> {
         if a.len() != c.len() {
             return Err(CpuBackendError::ShapeMismatch(
@@ -496,18 +565,40 @@ impl CpuCompute {
             return Ok(());
         }
         
-        // Compute mean
-        let mean = a.iter().sum::<f32>() / a.len() as f32;
+        // Compute mean (can be parallelized)
+        let mean = if a.len() >= 10000 {
+            use rayon::prelude::*;
+            a.par_iter().sum::<f32>() / a.len() as f32
+        } else {
+            a.iter().sum::<f32>() / a.len() as f32
+        };
         
-        // Compute variance
-        let variance = a.iter()
-            .map(|&x| (x - mean) * (x - mean))
-            .sum::<f32>() / a.len() as f32;
+        // Compute variance (can be parallelized)
+        let variance = if a.len() >= 10000 {
+            use rayon::prelude::*;
+            a.par_iter()
+                .map(|&x| (x - mean) * (x - mean))
+                .sum::<f32>() / a.len() as f32
+        } else {
+            a.iter()
+                .map(|&x| (x - mean) * (x - mean))
+                .sum::<f32>() / a.len() as f32
+        };
         
         // Normalize
         let std = (variance + eps).sqrt();
-        for i in 0..a.len() {
-            c[i] = (a[i] - mean) / std;
+        
+        if a.len() >= 10000 {
+            use rayon::prelude::*;
+            a.par_iter()
+                .zip(c.par_iter_mut())
+                .for_each(|(&val, out)| {
+                    *out = (val - mean) / std;
+                });
+        } else {
+            for i in 0..a.len() {
+                c[i] = (a[i] - mean) / std;
+            }
         }
         
         Ok(())
